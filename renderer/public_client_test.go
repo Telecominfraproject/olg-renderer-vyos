@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/routerarchitects/olg-renderer-vyos/renderer"
+	"github.com/Telecominfraproject/olg-renderer-vyos/renderer"
 )
 
 /*

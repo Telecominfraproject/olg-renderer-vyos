@@ -593,7 +593,7 @@ import (
   "encoding/json"
   "log"
 
-  "github.com/routerarchitects/olg-renderer-vyos/renderer"
+  "github.com/Telecominfraproject/olg-renderer-vyos/renderer"
 )
 
 func main() {

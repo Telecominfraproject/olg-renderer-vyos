@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/routerarchitects/olg-renderer-vyos/internal/vyos"
+	"github.com/Telecominfraproject/olg-renderer-vyos/internal/vyos"
 )
 
 type fakeVyosRunner struct {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/routerarchitects/olg-renderer-vyos/internal/normalize"
+	"github.com/Telecominfraproject/olg-renderer-vyos/internal/normalize"
 )
 
 //go:embed *.tmpl interface/*.tmpl service/*.tmpl

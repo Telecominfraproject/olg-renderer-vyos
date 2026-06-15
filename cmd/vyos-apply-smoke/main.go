@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/routerarchitects/olg-renderer-vyos/apply"
+	"github.com/Telecominfraproject/olg-renderer-vyos/apply"
 )
 
 const (

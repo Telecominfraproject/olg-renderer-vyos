@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/routerarchitects/olg-renderer-vyos/internal/normalize"
-	"github.com/routerarchitects/olg-renderer-vyos/internal/templates"
+	"github.com/Telecominfraproject/olg-renderer-vyos/internal/normalize"
+	"github.com/Telecominfraproject/olg-renderer-vyos/internal/templates"
 )
 
 const (

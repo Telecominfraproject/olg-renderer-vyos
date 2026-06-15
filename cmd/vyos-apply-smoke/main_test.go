@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/routerarchitects/olg-renderer-vyos/apply"
+	"github.com/Telecominfraproject/olg-renderer-vyos/apply"
 )
 
 /*

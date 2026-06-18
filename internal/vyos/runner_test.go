@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeCommandRunner struct {
@@ -22,6 +23,9 @@ type commandCall struct {
 }
 
 func (f *fakeCommandRunner) Run(ctx context.Context, env []string, name string, args ...string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	call := commandCall{name: name, args: append([]string(nil), args...), env: append([]string(nil), env...)}
 	f.calls = append(f.calls, call)
 	key := name + " " + joinArgs(args)
@@ -277,4 +281,122 @@ func envContains(env []string, want string) bool {
 		}
 	}
 	return false
+}
+
+type contextRecordingRunner struct {
+	calls []recordedCall
+}
+
+type recordedCall struct {
+	name        string
+	hasDeadline bool
+	deadline    time.Time
+}
+
+func (r *contextRecordingRunner) Run(ctx context.Context, env []string, name string, args ...string) (string, error) {
+	deadline, ok := ctx.Deadline()
+	r.calls = append(r.calls, recordedCall{
+		name:        name,
+		hasDeadline: ok,
+		deadline:    deadline,
+	})
+	if name == "/tmp/fake-cli-shell-api" && len(args) > 0 && args[0] == "getSessionEnv" {
+		return "VYATTA_CONFIG_SID='abc123'\nVYATTA_CONFIG_TMP=/tmp/vyos\n", nil
+	}
+	return "", nil
+}
+
+/*
+TC-VYOS-RUNNER-004
+Type: Positive
+Title: Command safety timeouts
+Summary:
+Verifies that all device-facing commands executed during a session or setup
+are protected by an internal safety timeout context.
+
+Validates:
+  - All command invocations are wrapped in contexts with deadlines
+  - Standard session calls (set, delete, commit, save, discard, close) receive a timeout
+*/
+func TestCLIShellRunnerCommandTimeouts(t *testing.T) {
+	rec := &contextRecordingRunner{}
+	runner := newCLIShellRunnerForTest(runnerPaths{
+		shellAPI:      "/tmp/fake-cli-shell-api",
+		configWrapper: "/tmp/fake-vyatta-cfg-cmd-wrapper",
+		mySet:         "/tmp/fake-my_set",
+		myDelete:      "/tmp/fake-my_delete",
+		myCommit:      "/tmp/fake-my_commit",
+		myDiscard:     "/tmp/fake-my_discard",
+	}, rec, func() string { return "12345" })
+
+	session, err := runner.Begin(context.Background())
+	if err != nil {
+		t.Fatalf("Begin failed: %v", err)
+	}
+
+	if _, err := session.Set(context.Background(), "set interfaces ethernet eth0 description WAN"); err != nil {
+		t.Fatalf("Set failed: %v", err)
+	}
+
+	if _, err := session.Delete(context.Background(), "delete interfaces bridge"); err != nil {
+		t.Fatalf("Delete failed: %v", err)
+	}
+
+	if _, err := session.Commit(context.Background()); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	if _, err := session.Save(context.Background()); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	if _, err := session.Discard(context.Background()); err != nil {
+		t.Fatalf("Discard failed: %v", err)
+	}
+
+	if _, err := session.Close(context.Background()); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	// 2 calls in Begin (getSessionEnv, setupSession), and 6 session calls
+	if len(rec.calls) != 8 {
+		t.Fatalf("expected 8 calls, got %d", len(rec.calls))
+	}
+
+	for _, call := range rec.calls {
+		if !call.hasDeadline {
+			t.Errorf("call to %s is missing deadline/timeout", call.name)
+		}
+	}
+}
+
+/*
+TC-VYOS-RUNNER-005
+Type: Negative
+Title: Runner with pre-cancelled context
+Summary:
+Verifies that if the caller passes a pre-cancelled context to the runner,
+the runner operations fail immediately and propagate the cancellation error.
+
+Validates:
+  - Runner setup fails immediately if parent context is cancelled
+*/
+func TestCLIShellRunnerWithCancelledContext(t *testing.T) {
+	commandRunner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"/tmp/fake-cli-shell-api getSessionEnv 12345": "VYATTA_CONFIG_SID=abc123\n",
+		},
+	}
+	runner := newRunnerForTest(commandRunner)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := runner.Begin(ctx)
+	if err == nil {
+		t.Fatal("expected Begin to fail with cancelled context, got nil")
+	}
+	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("expected context.Canceled error, got: %v", err)
+	}
 }

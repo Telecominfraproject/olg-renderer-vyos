@@ -69,6 +69,7 @@ func normalizeInterfaces(root map[string]json.RawMessage, portMap map[string][]s
 	ethDescriptions := make(map[string]ethernetDescription)
 	pendingVLANs := make([]pendingVLAN, 0)
 	serviceLANInputs := make([]ServiceLANInput, 0)
+	seenVLANs := make(map[int]bool)
 
 	hasUpstreamBridge := false
 	firstDownstreamIdx := -1
@@ -84,8 +85,21 @@ func normalizeInterfaces(root map[string]json.RawMessage, portMap map[string][]s
 			return InterfacesSection{}, newError(CodeNormalizeFailed, fmt.Sprintf("interfaces[%d] is invalid", idx), err)
 		}
 
+		if entry.VLAN != nil {
+			if entry.VLAN.ID < 1 || entry.VLAN.ID > 4094 {
+				return InterfacesSection{}, newError(CodeNormalizeFailed, fmt.Sprintf("interfaces[%d]: vlan id %d is out of bounds (must be 1-4094)", idx, entry.VLAN.ID), nil)
+			}
+		}
+
 		if entry.Role != "upstream" && entry.Role != "downstream" {
 			continue
+		}
+
+		if entry.Role == "downstream" && entry.VLAN != nil {
+			if seenVLANs[entry.VLAN.ID] {
+				return InterfacesSection{}, newError(CodeNormalizeFailed, fmt.Sprintf("interfaces[%d]: duplicate vlan id %d", idx, entry.VLAN.ID), nil)
+			}
+			seenVLANs[entry.VLAN.ID] = true
 		}
 
 		if err := validateDescription(entry.Name, fmt.Sprintf("interfaces[%d].name", idx)); err != nil {

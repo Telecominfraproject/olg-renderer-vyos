@@ -633,21 +633,17 @@ func TestRenderRejectsVLANWithoutDownstreamBridge(t *testing.T) {
 
 /*
 TC-NORMALIZE-007
-Type: Positive
-Title: Allowed VLANs derived from VIF IDs
+Type: Negative
+Title: Rejects duplicate VLAN IDs
 Summary:
-Renders duplicate VLAN IDs to verify allowed-vlan output is derived from
-unique sorted VIF IDs per member interface. The VIF commands remain deterministic,
-while the bridge member receives only one allowed-vlan line for the duplicated VLAN ID.
-The service LAN subnets are intentionally distinct so this test stays focused on
-duplicate VLAN rendering rather than service LAN overlap rejection.
+Verifies that downstream interfaces cannot configure duplicate VLAN IDs. Duplicate
+VLAN IDs are blocked during normalization and fail with CodeNormalizeFailed.
 
 Validates:
-  - VIFs are the single source of truth for VLAN IDs
-  - Duplicate VIF IDs generate one allowed-vlan line
-  - VIF rendering remains deterministic
+  - Rejects duplicate VLAN IDs on downstream interfaces
+  - Failure returns CodeNormalizeFailed
 */
-func TestRenderDerivesAllowedVLANsFromVIFIDs(t *testing.T) {
+func TestRenderRejectsDuplicateVLANIDs(t *testing.T) {
 	payload := []byte(`{
 		"interfaces": [
 			{
@@ -673,52 +669,20 @@ func TestRenderDerivesAllowedVLANsFromVIFIDs(t *testing.T) {
 		]
 	}`)
 
-	out, err := renderPayload(t, payload)
-	if err != nil {
-		t.Fatalf("render failed: %v", err)
-	}
-
-	if count := strings.Count(out.RenderedText, "set interfaces bridge br1 member interface eth1 allowed-vlan 10\n"); count != 1 {
-		t.Fatalf("expected one allowed-vlan 10 line, got %d\n%s", count, out.RenderedText)
-	}
-	if count := strings.Count(out.RenderedText, "set interfaces bridge br1 member interface eth2 allowed-vlan 10\n"); count != 0 {
-		t.Fatalf("expected no eth2 allowed-vlan 10 line, got %d\n%s", count, out.RenderedText)
-	}
-
-	expectedOrder := []string{
-		"set interfaces bridge br1 member interface eth1 allowed-vlan 10",
-		"set interfaces bridge br1 member interface eth1 native-vlan 1",
-		"set interfaces bridge br1 member interface eth2",
-		"set interfaces bridge br1 vif 10 address 192.168.10.1/24",
-		"set interfaces bridge br1 vif 10 description 'LAN.10A'",
-		"set interfaces bridge br1 vif 10 address 192.168.11.1/24",
-		"set interfaces bridge br1 vif 10 description 'LAN.10B'",
-	}
-	last := -1
-	for _, line := range expectedOrder {
-		idx := strings.Index(out.RenderedText, line)
-		if idx < 0 {
-			t.Fatalf("expected output to contain %q\n%s", line, out.RenderedText)
-		}
-		if idx <= last {
-			t.Fatalf("expected %q after previous line\n%s", line, out.RenderedText)
-		}
-		last = idx
-	}
+	_, err := renderPayload(t, payload)
+	assertErrorCode(t, err, CodeNormalizeFailed)
 }
 
 /*
 TC-NORMALIZE-010
 Type: Negative
-Title: Overlapping service LANs reject duplicate VLAN render payloads
+Title: Overlapping service LANs reject overlapping subnet render payloads
 Summary:
 Confirms that renderer-level normalization rejects payloads whose downstream
-static IPv4 service LANs overlap, even when the interface structure would
-otherwise be valid for duplicate VLAN rendering.
+static IPv4 service LANs overlap, even when they reside on different VLAN IDs.
 
 Validates:
-  - Duplicate normalized service LAN prefixes are rejected before render
-  - Duplicate VLAN IDs do not bypass service LAN safety validation
+  - Overlapping service LAN prefixes are rejected before render
   - Renderer returns normalize_failed for overlapping service LAN payloads
 */
 func TestRenderRejectsOverlappingServiceLANs(t *testing.T) {
@@ -742,7 +706,7 @@ func TestRenderRejectsOverlappingServiceLANs(t *testing.T) {
 				"ipv4": {"addressing": "static", "subnet": "192.168.10.2/24", "dhcp": {"lease-time": 21600, "lease-first": 120, "lease-count": 10}},
 				"name": "LAN.10B",
 				"role": "downstream",
-				"vlan": {"id": 10}
+				"vlan": {"id": 20}
 			}
 		]
 	}`)

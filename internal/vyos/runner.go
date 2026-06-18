@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -101,7 +102,10 @@ func (r *CLIShellRunner) Begin(ctx context.Context) (Session, error) {
 		return nil, err
 	}
 	sessionID := r.newSessionID()
-	output, err := r.runner.Run(ctx, nil, r.paths.shellAPI, "getSessionEnv", sessionID)
+
+	ctxEnv, cancelEnv := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelEnv()
+	output, err := r.runner.Run(ctxEnv, nil, r.paths.shellAPI, "getSessionEnv", sessionID)
 	if err != nil {
 		return nil, commandFailure("getSessionEnv", r.paths.shellAPI, []string{"getSessionEnv", sessionID}, output, err)
 	}
@@ -110,7 +114,10 @@ func (r *CLIShellRunner) Begin(ctx context.Context) (Session, error) {
 		return nil, fmt.Errorf("parse getSessionEnv output failed: %w", err)
 	}
 	sessionEnv := mergeEnv(os.Environ(), env)
-	if output, err = r.runner.Run(ctx, sessionEnv, r.paths.shellAPI, "setupSession"); err != nil {
+
+	ctxSetup, cancelSetup := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelSetup()
+	if output, err = r.runner.Run(ctxSetup, sessionEnv, r.paths.shellAPI, "setupSession"); err != nil {
 		return nil, commandFailure("setupSession", r.paths.shellAPI, []string{"setupSession"}, output, err)
 	}
 	return &cliSession{paths: r.paths, runner: r.runner, env: sessionEnv}, nil
@@ -173,7 +180,9 @@ func (s *cliSession) run(ctx context.Context, name string, args ...string) (stri
 	if s == nil || s.runner == nil {
 		return "", fmt.Errorf("vyos session is not initialized")
 	}
-	output, err := s.runner.Run(ctx, s.env, name, args...)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	output, err := s.runner.Run(ctxTimeout, s.env, name, args...)
 	if err != nil {
 		return output, commandFailure(operationName(name, s.paths), name, args, output, err)
 	}

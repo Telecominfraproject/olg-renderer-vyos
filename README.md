@@ -1153,4 +1153,3 @@ apply:
 vyos-nats-agent:
   NATS lifecycle, KV loading, renderer/apply orchestration, result publishing
 ```
->>>>>>> 70302af (feat: implement MVP VyOS renderer with deterministic normalization and template rendering)

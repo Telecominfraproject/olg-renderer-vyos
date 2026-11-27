@@ -217,7 +217,32 @@ func normalizeInterfaces(root map[string]json.RawMessage, portMap map[string][]s
 		return ethernets[i].Name < ethernets[j].Name
 	})
 
-	return InterfacesSection{Bridges: bridges, Ethernets: ethernets, ServiceLANInputs: serviceLANInputs}, nil
+	physicalPortRoles := make(map[string]string)
+	ambiguousPorts := make(map[string]bool)
+	for _, b := range bridges {
+		role := "downstream"
+		if b.Name == "br0" {
+			role = "upstream"
+		}
+		for _, portName := range b.MemberInterfaces {
+			if ambiguousPorts[portName] {
+				continue
+			}
+			if existingRole, exists := physicalPortRoles[portName]; exists && existingRole != role {
+				delete(physicalPortRoles, portName)
+				ambiguousPorts[portName] = true
+				continue
+			}
+			physicalPortRoles[portName] = role
+		}
+	}
+
+	return InterfacesSection{
+		Bridges:           bridges,
+		Ethernets:         ethernets,
+		ServiceLANInputs:  serviceLANInputs,
+		PhysicalPortRoles: physicalPortRoles,
+	}, nil
 }
 
 func serviceLANInputFromRaw(entry rawInterface, idx int, isVLAN bool) ServiceLANInput {
